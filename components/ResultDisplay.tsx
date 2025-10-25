@@ -1,13 +1,15 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { Volume2, VolumeX, Copy, Check } from 'lucide-react';
+import { GroceryItem } from '../types';
 
 interface ResultDisplayProps {
   result: string;
   autoPlay?: boolean;
+  remainingItems?: GroceryItem[];
 }
 
-const ResultDisplay: React.FC<ResultDisplayProps> = ({ result, autoPlay = false }) => {
+const ResultDisplay: React.FC<ResultDisplayProps> = ({ result, autoPlay = false, remainingItems }) => {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isCopied, setIsCopied] = useState(false);
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
@@ -61,32 +63,59 @@ const ResultDisplay: React.FC<ResultDisplayProps> = ({ result, autoPlay = false 
     }
 
     utterance.onstart = () => setIsSpeaking(true);
-    utterance.onend = () => setIsSpeaking(false);
+    utterance.onend = () => {
+      setTimeout(() => {
+        if (!window.speechSynthesis.speaking) {
+          setIsSpeaking(false);
+        }
+      }, 100);
+    };
     utterance.onerror = (e) => {
-      setIsSpeaking(false);
       console.error("An error occurred during speech synthesis:", e);
+      setIsSpeaking(false);
     };
     
-    window.speechSynthesis.cancel(); // Cancel previous before speaking
     window.speechSynthesis.speak(utterance);
   }, [voices]);
+
+  const getRemainingText = useCallback(() => {
+    if (remainingItems === undefined) return null;
+
+    if (remainingItems.length > 0) {
+      return `You still need to find: ${remainingItems.map(i => i.name).join(', ')}.`;
+    } else {
+      return "All items on your list have been found!";
+    }
+  }, [remainingItems]);
 
   const handleToggleSpeak = useCallback(() => {
     if (isSpeaking) {
       window.speechSynthesis.cancel();
       setIsSpeaking(false);
     } else {
+      window.speechSynthesis.cancel();
       speak(result);
+      const remainingText = getRemainingText();
+      if (remainingText) {
+        speak(remainingText);
+      }
     }
-  }, [isSpeaking, result, speak]);
+  }, [isSpeaking, result, speak, getRemainingText]);
 
   // Autoplay effect
   useEffect(() => {
-    // Only run if autoPlay is true, there's a result, and voices are loaded.
     if (autoPlay && result && voices.length > 0) {
+      window.speechSynthesis.cancel();
+      
       speak(result);
+      
+      const remainingText = getRemainingText();
+      if (remainingText) {
+        speak(remainingText);
+      }
     }
-  }, [result, autoPlay, voices, speak]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [result, autoPlay, voices]);
 
   return (
     <div className="bg-black/20 p-6 rounded-lg border border-white/10 animate-fade-in">

@@ -1,7 +1,7 @@
 
 import { GoogleGenAI, GenerateContentResponse } from '@google/genai';
 
-interface ImagePart {
+interface MediaPart {
   inlineData: {
     data: string;
     mimeType: string;
@@ -16,7 +16,7 @@ if (!API_KEY) {
 
 const ai = new GoogleGenAI({ apiKey: API_KEY, vertexai: true });
 
-export const analyzeImage = async (imagePart: ImagePart, prompt: string): Promise<string> => {
+export const analyzeImage = async (imagePart: MediaPart, prompt: string): Promise<string> => {
   try {
     const response: GenerateContentResponse = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
@@ -45,18 +45,15 @@ export const analyzeImage = async (imagePart: ImagePart, prompt: string): Promis
   }
 };
 
-export const cleanGroceryList = async (rawTranscript: string): Promise<string[]> => {
-  if (!rawTranscript.trim()) {
-    return [];
-  }
+export const processGroceryAudio = async (audioPart: MediaPart): Promise<string[]> => {
   try {
-    const prompt = `You are a grocery list assistant. A user has provided a voice transcript. Your task is to extract only the grocery items from the following text. Remove all filler words (like 'um', 'uh', 'like', 'I need', 'okay so'), conversational phrases, and any words that are not grocery items. Format the output as a clean, comma-separated string. For example, if the input is 'okay so I need uh milk, maybe some eggs, and oh yeah bread please', the output should be 'milk, eggs, bread'. Here is the transcript: "${rawTranscript}"`;
+    const prompt = `An audio or video file is provided. If it is a video file, process only its audio track. The audio contains someone speaking a grocery list. Your task is to transcribe the audio, extract only the grocery items from the transcription, remove all filler words (like 'um', 'uh', 'like', 'I need', 'okay so'), conversational phrases, and any words that are not grocery items. Format the output as a clean, comma-separated string. For example, if the audio contains 'okay so I need uh milk, maybe some eggs, and oh yeah bread please', the output should be 'milk, eggs, bread'.`;
 
     const response: GenerateContentResponse = await ai.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: {
         role: 'user',
-        parts: [{ text: prompt }],
+        parts: [audioPart, { text: prompt }],
       },
     });
 
@@ -66,7 +63,7 @@ export const cleanGroceryList = async (rawTranscript: string): Promise<string[]>
     }
     return [];
   } catch (error) {
-    console.error("Error cleaning grocery list with Gemini API:", error);
-    throw new Error("Failed to process the grocery list. Please try again.");
+    console.error("Error processing grocery audio with Gemini API:", error);
+    throw new Error("Failed to process the audio file. The format may be unsupported or the file may be corrupt.");
   }
 };

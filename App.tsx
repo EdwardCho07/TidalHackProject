@@ -9,15 +9,27 @@ import { analyzeImage } from './services/geminiService';
 import { fileToGenerativePart } from './utils/imageUtils';
 import GroceryList from './components/GroceryList';
 import VideoAnalyzer from './components/VideoAnalyzer';
+import { GroceryItem } from './types';
+import RemainingItems from './components/RemainingItems';
 
 type Tab = 'image' | 'list' | 'video';
 
-const ImageAnalyzer: React.FC = () => {
+interface ImageAnalyzerProps {
+  onItemFound: (analysisResult: string) => void;
+  groceryItems: GroceryItem[];
+}
+
+const ImageAnalyzer: React.FC<ImageAnalyzerProps> = ({ onItemFound, groceryItems }) => {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [currentGroceryItems, setCurrentGroceryItems] = useState<GroceryItem[]>(groceryItems);
+
+  useEffect(() => {
+    setCurrentGroceryItems(groceryItems);
+  }, [groceryItems]);
 
   useEffect(() => {
     if (!imageFile) {
@@ -56,6 +68,7 @@ const ImageAnalyzer: React.FC = () => {
       
       const analysisResult = await analyzeImage(imagePart, prompt);
       setResult(analysisResult);
+      onItemFound(analysisResult); // Notify parent of the found item
     } catch (e: unknown) {
       if (e instanceof Error) {
         setError(e.message);
@@ -65,7 +78,9 @@ const ImageAnalyzer: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [imageFile, isLoading]);
+  }, [imageFile, isLoading, onItemFound]);
+
+  const remainingItems = currentGroceryItems.filter(item => !item.checked);
 
   return (
     <>
@@ -99,7 +114,8 @@ const ImageAnalyzer: React.FC = () => {
 
       <div className="mt-8">
         {error && <ErrorAlert message={error} />}
-        {result && <ResultDisplay result={result} autoPlay={true} />}
+        {result && <ResultDisplay result={result} autoPlay={true} remainingItems={remainingItems} />}
+        {result && <RemainingItems items={remainingItems} />}
         {!isLoading && !result && !error && (
              <div className="text-center text-indigo-300/70 p-4 border-2 border-dashed border-indigo-400/30 rounded-lg">
                 Your analysis result will appear here.
@@ -112,6 +128,43 @@ const ImageAnalyzer: React.FC = () => {
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>('image');
+  const [groceryItems, setGroceryItems] = useState<GroceryItem[]>([]);
+
+  const addGroceryItems = (newItems: string[]) => {
+    const itemsToAdd: GroceryItem[] = newItems
+      .map(name => ({ name, checked: false }))
+      .filter(newItem => !groceryItems.some(existingItem => existingItem.name.toLowerCase() === newItem.name.toLowerCase()));
+    setGroceryItems(prevItems => [...prevItems, ...itemsToAdd]);
+  };
+
+  const clearGroceryList = () => {
+    setGroceryItems([]);
+  };
+
+  const toggleGroceryItem = (index: number) => {
+    setGroceryItems(prevItems => 
+      prevItems.map((item, i) => 
+        i === index ? { ...item, checked: !item.checked } : item
+      )
+    );
+  };
+
+  const checkItemFromAnalysis = (analysisResult: string) => {
+    const resultLower = analysisResult.toLowerCase();
+    
+    setGroceryItems(prevItems => {
+      const itemIndexToUpdate = prevItems.findIndex(item => 
+        !item.checked && resultLower.includes(item.name.toLowerCase())
+      );
+
+      if (itemIndexToUpdate !== -1) {
+        return prevItems.map((item, i) => 
+          i === itemIndexToUpdate ? { ...item, checked: true } : item
+        );
+      }
+      return prevItems;
+    });
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-slate-900 text-gray-200 flex flex-col items-center justify-center p-4 sm:p-6 lg:p-8">
@@ -160,9 +213,16 @@ const App: React.FC = () => {
             </nav>
           </div>
           
-          {activeTab === 'image' && <ImageAnalyzer />}
+          {activeTab === 'image' && <ImageAnalyzer onItemFound={checkItemFromAnalysis} groceryItems={groceryItems} />}
           {activeTab === 'video' && <VideoAnalyzer />}
-          {activeTab === 'list' && <GroceryList />}
+          {activeTab === 'list' && (
+            <GroceryList 
+              items={groceryItems}
+              onAddItems={addGroceryItems}
+              onClearList={clearGroceryList}
+              onToggleItem={toggleGroceryItem}
+            />
+          )}
 
         </main>
         <footer className="text-center mt-8 text-indigo-300/60 text-sm">
